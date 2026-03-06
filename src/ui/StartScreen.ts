@@ -39,15 +39,39 @@ export class StartScreen {
           border: none;
           border-radius: 8px;
           cursor: pointer;
-          transition: background 0.3s;
+          transform: translateY(0);
+          transition: background 0.2s, transform 0.1s;
         ">Start Game</button>
       </div>
     `;
 
-    // Attach button click handler
+    // Attach button interactions
     const button = this.container.querySelector('#start-button') as HTMLButtonElement;
     if (button) {
+      button.onmouseenter = () => {
+        button.style.background = '#57c95b';
+      };
+
+      button.onmouseleave = () => {
+        button.style.background = '#4CAF50';
+        button.style.transform = 'translateY(0)';
+      };
+
+      button.onmousedown = () => {
+        button.style.transform = 'translateY(1px) scale(0.98)';
+        button.style.background = '#3f9c44';
+      };
+
+      button.onmouseup = () => {
+        button.style.transform = 'translateY(0)';
+        button.style.background = '#57c95b';
+      };
+
       button.onclick = () => {
+        button.textContent = 'Starting...';
+        button.disabled = true;
+        button.style.cursor = 'default';
+
         if (this.startCallback) {
           this.startCallback();
         }

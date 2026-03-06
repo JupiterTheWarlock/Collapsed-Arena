@@ -1,4 +1,5 @@
 import { defineConfig } from 'vite';
+import path from 'path';
 
 export default defineConfig({
   root: '.',
@@ -12,6 +13,11 @@ export default defineConfig({
     port: 5173,
     strictPort: false,
     open: false
+  },
+  resolve: {
+    alias: {
+      '@': path.resolve(__dirname, './src')
+    }
   },
   assetsInclude: ['**/*.json'],
   optimizeDeps: {

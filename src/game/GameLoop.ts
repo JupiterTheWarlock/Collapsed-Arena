@@ -1,11 +1,22 @@
+export type UpdateCallback = (deltaTime: number) => void;
+
 export class GameLoop {
   private running = false;
   private lastTime = 0;
   private readonly targetFPS = 60;
   private readonly frameTime = 1000 / this.targetFPS;
+  private updateCallbacks: UpdateCallback[] = [];
 
   constructor() {
     console.log('GameLoop: Initialized');
+  }
+
+  /**
+   * Register update callback
+   * @param callback - Function to call each frame
+   */
+  onUpdate(callback: UpdateCallback): void {
+    this.updateCallbacks.push(callback);
   }
 
   start(): void {
@@ -41,8 +52,14 @@ export class GameLoop {
   };
 
   private update(deltaTime: number): void {
-    // Game update logic will go here
-    // For now, just verify the loop is running
+    // Call all registered update callbacks
+    for (const callback of this.updateCallbacks) {
+      try {
+        callback(deltaTime);
+      } catch (error) {
+        console.error('Error in update callback:', error);
+      }
+    }
   }
 
   isRunning(): boolean {
@@ -53,7 +70,3 @@ export class GameLoop {
     return this.targetFPS;
   }
 }
-
-// Auto-start the game loop
-const gameLoop = new GameLoop();
-gameLoop.start();
