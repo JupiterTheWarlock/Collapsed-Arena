@@ -11,6 +11,8 @@ import { InputManager } from './input/InputManager';
 import { MovementSystem } from './systems/MovementSystem';
 import { CombatSystem } from './systems/CombatSystem';
 import { SpawnSystem } from './systems/SpawnSystem';
+import { CollisionSystem } from './systems/CollisionSystem';
+import { ParticleSystem } from './systems/ParticleSystem';
 import {
   PlayerControlComponent,
   MovementComponent,
@@ -56,6 +58,8 @@ async function initGame() {
   const movementSystem = new MovementSystem();
   const combatSystem = new CombatSystem();
   const spawnSystem = new SpawnSystem();
+  const collisionSystem = new CollisionSystem(combatSystem);
+  const particleSystem = new ParticleSystem(sceneManager.getScene());
 
   // Create UI layers to avoid DOM overwrites between screens
   appContainer.style.position = 'relative';
@@ -191,8 +195,8 @@ async function initGame() {
       true // isGrounded
     ));
     playerEntity.addComponent(new PhysicsComponent({ x: 0, y: 0, z: 0 }, { x: 0, y: 0, z: 0 }));
-    playerEntity.addComponent(new CubeClusterComponent(8, 1.0)); // Start with 8 cubes
-    playerEntity.addComponent(new CombatComponent(8, 8, 0, false)); // Health: 8, Max: 8
+    playerEntity.addComponent(new CubeClusterComponent(playerConfig.initialCubes, 1.0)); // Start with 1 cube
+    playerEntity.addComponent(new CombatComponent(playerConfig.initialCubes, playerConfig.initialCubes, 0, false)); // Health: 1, Max: 1
     playerEntity.addComponent(new AbsorptionComponent(0.0, 1.0)); // Absorption buffer
 
     // Create visual representation
@@ -215,6 +219,7 @@ async function initGame() {
   function updatePhysics(deltaTime: number, entities: Entity[]) {
     const gravity = -20; // Gravity force
     const groundY = -1; // Ground level
+    const groundThreshold = 0.1; // Allow small floating
 
     for (const entity of entities) {
       if (!entity.isActive()) continue;
@@ -227,6 +232,10 @@ async function initGame() {
       // Get current position
       const pos = entity.getPosition();
 
+      // Store previous position for rotation calculation
+      const prevX = pos.x;
+      const prevZ = pos.z;
+
       // Apply gravity if in air
       if (movement && !movement.isGrounded) {
         physics.velocity.y += gravity * deltaTime;
@@ -237,22 +246,61 @@ async function initGame() {
       pos.y += physics.velocity.y * deltaTime;
       pos.z += physics.velocity.z * deltaTime;
 
-      // Ground collision
-      if (pos.y <= groundY) {
+      // Ground collision (with threshold for floating)
+      if (pos.y <= groundY + groundThreshold) {
         pos.y = groundY;
         physics.velocity.y = 0;
 
         if (movement) {
           movement.isGrounded = true;
         }
+      } else {
+        // Entity is in air
+        if (movement) {
+          movement.isGrounded = false;
+        }
       }
 
-      // Apply damping/friction
-      physics.velocity.x *= 0.95;
-      physics.velocity.z *= 0.95;
+      // Apply damping/friction (only when grounded for less friction)
+      if (movement && movement.isGrounded) {
+        physics.velocity.x *= 0.98; // Less friction on ground
+        physics.velocity.z *= 0.98;
+      } else {
+        physics.velocity.x *= 0.95; // More friction in air
+        physics.velocity.z *= 0.95;
+      }
 
       // Update entity position
       entity.setPosition(pos);
+
+      // Calculate rolling rotation for player mesh
+      if (entity.getType() === 'player' && (Math.abs(pos.x - prevX) > 0.001 || Math.abs(pos.z - prevZ) > 0.001)) {
+        // Calculate movement direction and distance
+        const dx = pos.x - prevX;
+        const dz = pos.z - prevZ;
+        const distance = Math.sqrt(dx * dx + dz * dz);
+
+        // Calculate rotation axis (perpendicular to movement direction)
+        // If moving in +X direction, rotate around +Z axis
+        // If moving in +Z direction, rotate around -X axis
+        const axisX = -dz / distance; // Perpendicular to movement
+        const axisZ = dx / distance;
+
+        // Calculate rotation angle (for a 1x1x1 cube, circumference = π * diameter = π)
+        // Rolling distance = angle * radius, so angle = distance / radius
+        // For a 1x1x1 cube, radius = 0.5
+        const rotationAngle = distance / 0.5; // radians
+
+        // Create rotation quaternion
+        const rotationAxis = new THREE.Vector3(axisX, 0, axisZ).normalize();
+        const quaternion = new THREE.Quaternion();
+        quaternion.setFromAxisAngle(rotationAxis, rotationAngle);
+
+        // Apply rotation to player mesh
+        if (playerMesh) {
+          playerMesh.quaternion.multiplyQuaternions(quaternion, playerMesh.quaternion);
+        }
+      }
     }
   }
 
@@ -339,11 +387,31 @@ async function initGame() {
 
       // Update all game systems
       movementSystem.update(deltaTime, allEntities);
+      collisionSystem.update(deltaTime, allEntities); // Collision detection
       combatSystem.update(deltaTime, allEntities);
       spawnSystem.update(deltaTime, allEntities);
 
       // Apply physics simulation
       updatePhysics(deltaTime, allEntities);
+
+      // Update particle effects for player
+      if (playerEntity) {
+        const playerPhysics = playerEntity.getComponent('PhysicsComponent') as PhysicsComponent;
+        const playerMovement = playerEntity.getComponent('MovementComponent') as MovementComponent;
+        if (playerPhysics && playerMovement) {
+          const playerPos = new THREE.Vector3(
+            playerEntity.getPosition().x,
+            playerEntity.getPosition().y,
+            playerEntity.getPosition().z
+          );
+          const playerVel = new THREE.Vector3(
+            playerPhysics.velocity.x,
+            playerPhysics.velocity.y,
+            playerPhysics.velocity.z
+          );
+          particleSystem.update(deltaTime, playerPos, playerVel, playerMovement.isGrounded);
+        }
+      }
 
       // Update visual representations
       updateEntityVisuals(allEntities);
@@ -368,6 +436,8 @@ async function initGame() {
     sceneManager.dispose();
     entityManager.dispose();
     inputManager.dispose();
+    collisionSystem.dispose();
+    particleSystem.dispose();
   });
 }
 

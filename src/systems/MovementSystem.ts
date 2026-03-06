@@ -1,6 +1,6 @@
 import { System } from '@/core/System';
 import { Entity } from '@/core/Entity';
-import { MovementComponent, PhysicsComponent, PlayerControlComponent } from '@/components';
+import { MovementComponent, PhysicsComponent, PlayerControlComponent, CubeClusterComponent } from '@/components';
 import { getPlayerConfig } from '@/config/config-loader';
 
 /**
@@ -22,7 +22,7 @@ export class MovementSystem extends System {
    * @param deltaTime - Time since last frame (in seconds)
    * @param entities - All entities in the game
    */
-  update(deltaTime: number, entities: Entity[]): void {
+  update(_deltaTime: number, entities: Entity[]): void {
     // Get player config values
     const playerConfig = getPlayerConfig();
 
@@ -33,12 +33,13 @@ export class MovementSystem extends System {
       const playerControl = entity.getComponent('PlayerControlComponent') as PlayerControlComponent;
       const movement = entity.getComponent('MovementComponent') as MovementComponent;
       const physics = entity.getComponent('PhysicsComponent') as PhysicsComponent;
+      const cluster = entity.getComponent('CubeClusterComponent') as CubeClusterComponent;
 
       // Only process entities with required components
-      if (!playerControl || !movement || !physics) continue;
+      if (!playerControl || !movement || !physics || !cluster) continue;
 
       // Apply auto-scroll (constant forward force)
-      this.applyAutoScroll(movement, physics, playerConfig.rollSpeed, deltaTime, playerControl);
+      this.applyAutoScroll(movement, physics, cluster, playerControl);
 
       // Process jump
       if (this.jumpRequested && movement.isGrounded) {
@@ -61,20 +62,25 @@ export class MovementSystem extends System {
   /**
    * Apply constant forward force (auto-scroll)
    * Applies force in the direction the player is facing
+   * Speed is dynamically calculated based on cube cluster size
    */
   private applyAutoScroll(
     movement: MovementComponent,
     physics: PhysicsComponent,
-    rollSpeed: number,
-    deltaTime: number,
+    cluster: CubeClusterComponent,
     playerControl: PlayerControlComponent
   ): void {
     // Get player's forward direction
     const direction = playerControl.forwardDirection;
 
-    // Apply force in the direction player is facing
-    physics.velocity.x += Math.sin(direction) * rollSpeed * deltaTime;
-    physics.velocity.z += Math.cos(direction) * rollSpeed * deltaTime;
+    // Calculate dynamic speed based on cube count
+    // Formula: diameter = 2 × cubeCount^(1/3)
+    // This ensures the player always moves one "body length" per second
+    const diameter = 2 * Math.pow(cluster.cubeCount, 1/3);
+
+    // Set target velocity (not accumulate) for consistent rolling speed
+    physics.velocity.x = Math.sin(direction) * diameter;
+    physics.velocity.z = Math.cos(direction) * diameter;
   }
 
   /**

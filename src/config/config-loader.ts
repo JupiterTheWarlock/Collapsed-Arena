@@ -2,8 +2,8 @@
 // Source: docs/game-design.md Section 9
 export const gameConfig = {
   player: {
-    initialCubes: 8,
-    rollSpeed: 10,
+    initialCubes: 1,
+    rollSpeed: 6.28, // 2π - rolls 2 times per second (circumference = π per roll) - DEPRECATED, now dynamic
     jumpForce: 15,
     fastFallSpeed: 30,
     fastFallDamageMultiplier: 1.0
