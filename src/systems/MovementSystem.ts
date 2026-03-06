@@ -38,7 +38,7 @@ export class MovementSystem extends System {
       if (!playerControl || !movement || !physics) continue;
 
       // Apply auto-scroll (constant forward force)
-      this.applyAutoScroll(movement, physics, playerConfig.rollSpeed, deltaTime);
+      this.applyAutoScroll(movement, physics, playerConfig.rollSpeed, deltaTime, playerControl);
 
       // Process jump
       if (this.jumpRequested && movement.isGrounded) {
@@ -60,15 +60,21 @@ export class MovementSystem extends System {
 
   /**
    * Apply constant forward force (auto-scroll)
+   * Applies force in the direction the player is facing
    */
   private applyAutoScroll(
     movement: MovementComponent,
     physics: PhysicsComponent,
     rollSpeed: number,
-    deltaTime: number
+    deltaTime: number,
+    playerControl: PlayerControlComponent
   ): void {
-    // Apply forward force
-    physics.velocity.z += rollSpeed * deltaTime;
+    // Get player's forward direction
+    const direction = playerControl.forwardDirection;
+
+    // Apply force in the direction player is facing
+    physics.velocity.x += Math.sin(direction) * rollSpeed * deltaTime;
+    physics.velocity.z += Math.cos(direction) * rollSpeed * deltaTime;
   }
 
   /**

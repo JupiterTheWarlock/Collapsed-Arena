@@ -5,7 +5,21 @@ import { GameOverScreen } from './ui/GameOverScreen';
 import { SceneManager } from './rendering/SceneManager';
 import { CameraController } from './rendering/CameraController';
 import { LightingManager } from './rendering/LightingManager';
-import { getCameraConfig } from './config/config-loader';
+import { EntityManager } from './core/EntityManager';
+import { Entity } from './core/Entity';
+import { InputManager } from './input/InputManager';
+import { MovementSystem } from './systems/MovementSystem';
+import { CombatSystem } from './systems/CombatSystem';
+import { SpawnSystem } from './systems/SpawnSystem';
+import {
+  PlayerControlComponent,
+  MovementComponent,
+  PhysicsComponent,
+  CubeClusterComponent,
+  CombatComponent,
+  AbsorptionComponent
+} from './components';
+import { getCameraConfig, getPlayerConfig } from './config/config-loader';
 import * as THREE from 'three';
 
 console.log('Collapsed Arena - Initializing...');
@@ -26,6 +40,22 @@ async function initGame() {
 
   // Initialize rendering
   const sceneManager = new SceneManager();
+
+  // Initialize entity manager
+  const entityManager = new EntityManager();
+
+  // Initialize input manager (will be activated when game starts)
+  const canvas = sceneManager.getCanvas();
+  if (!canvas) {
+    console.error('Canvas not found');
+    return;
+  }
+  const inputManager = new InputManager(canvas);
+
+  // Initialize game systems
+  const movementSystem = new MovementSystem();
+  const combatSystem = new CombatSystem();
+  const spawnSystem = new SpawnSystem();
 
   // Create UI layers to avoid DOM overwrites between screens
   appContainer.style.position = 'relative';
@@ -56,10 +86,7 @@ async function initGame() {
   uiRoot.appendChild(gameOverScreenContainer);
 
   // Add canvas to DOM
-  const canvas = sceneManager.getCanvas();
-  if (canvas) {
-    appContainer.appendChild(canvas);
-  }
+  appContainer.appendChild(canvas);
   appContainer.appendChild(uiRoot);
 
   // Get camera config for CameraController
@@ -67,19 +94,6 @@ async function initGame() {
 
   const cameraController = new CameraController(sceneManager.getCamera(), cameraConfig);
   new LightingManager(sceneManager.getScene());
-
-  // Create a simple player target for camera (placeholder)
-  const playerTarget = new THREE.Object3D();
-  playerTarget.position.set(0, 0, 0);
-  sceneManager.getScene().add(playerTarget);
-
-  // Add visible player placeholder cube to indicate game has started
-  const playerMesh = new THREE.Mesh(
-    new THREE.BoxGeometry(1, 1, 1),
-    new THREE.MeshStandardMaterial({ color: 0x5bc0ff })
-  );
-  playerMesh.position.set(0, 0.5, 0);
-  sceneManager.getScene().add(playerMesh);
 
   // Add a simple ground plane
   const groundGeometry = new THREE.PlaneGeometry(100, 100);
@@ -96,6 +110,10 @@ async function initGame() {
   // Initialize game loop
   const gameLoop = new GameLoop();
 
+  // Player entity (will be created when game starts)
+  let playerEntity: Entity | null = null;
+  let playerMesh: THREE.Mesh | null = null;
+
   // Register state change handlers
   gameState.onStateChange((newState) => {
     console.log('State changed:', newState);
@@ -106,21 +124,176 @@ async function initGame() {
         gameOverScreen.hide();
         startScreenContainer.style.pointerEvents = 'auto';
         gameOverScreenContainer.style.pointerEvents = 'none';
+
+        // Release pointer lock when returning to menu
+        inputManager.exitPointerLock();
+
+        // Clear entities
+        entityManager.clear();
+        playerEntity = null;
+        if (playerMesh) {
+          sceneManager.getScene().remove(playerMesh);
+          playerMesh = null;
+        }
+
+        // Stop spawning
+        spawnSystem.stopSpawning();
         break;
+
       case 'PLAYING':
         startScreen.hide();
         gameOverScreen.hide();
         startScreenContainer.style.pointerEvents = 'none';
         gameOverScreenContainer.style.pointerEvents = 'none';
+
+        // Request pointer lock for mouse control
+        inputManager.requestPointerLock().catch((err) => {
+          console.error('Failed to acquire pointer lock:', err);
+        });
+
+        // Create player entity
+        createPlayerEntity();
+
+        // Start spawning enemies
+        spawnSystem.startSpawning();
         break;
+
       case 'GAME_OVER':
         const survivalTime = gameState.getGameTime();
         gameOverScreen.show(survivalTime);
         startScreenContainer.style.pointerEvents = 'none';
         gameOverScreenContainer.style.pointerEvents = 'auto';
+
+        // Release pointer lock on game over
+        inputManager.exitPointerLock();
+
+        // Stop spawning
+        spawnSystem.stopSpawning();
         break;
     }
   });
+
+  /**
+   * Create the player entity with all required components
+   */
+  function createPlayerEntity() {
+    const playerConfig = getPlayerConfig();
+
+    // Create player entity
+    playerEntity = entityManager.createEntity('player');
+
+    // Add required components
+    playerEntity.addComponent(new PlayerControlComponent(0)); // Initial direction: 0 radians
+    playerEntity.addComponent(new MovementComponent(
+      playerConfig.rollSpeed,
+      playerConfig.jumpForce,
+      playerConfig.fastFallSpeed,
+      true // isGrounded
+    ));
+    playerEntity.addComponent(new PhysicsComponent({ x: 0, y: 0, z: 0 }, { x: 0, y: 0, z: 0 }));
+    playerEntity.addComponent(new CubeClusterComponent(8, 1.0)); // Start with 8 cubes
+    playerEntity.addComponent(new CombatComponent(8, 8, 0, false)); // Health: 8, Max: 8
+    playerEntity.addComponent(new AbsorptionComponent(0.0, 1.0)); // Absorption buffer
+
+    // Create visual representation
+    const geometry = new THREE.BoxGeometry(1, 1, 1);
+    const material = new THREE.MeshStandardMaterial({ color: 0x5bc0ff });
+    playerMesh = new THREE.Mesh(geometry, material);
+    playerMesh.position.set(0, 0.5, 0);
+
+    sceneManager.getScene().add(playerMesh);
+
+    console.log('Player entity created with all components');
+  }
+
+  // Enemy meshes map (entity ID -> mesh)
+  const enemyMeshes = new Map<string, THREE.Mesh>();
+
+  /**
+   * Simple physics simulation - applies velocity to position
+   */
+  function updatePhysics(deltaTime: number, entities: Entity[]) {
+    const gravity = -20; // Gravity force
+    const groundY = -1; // Ground level
+
+    for (const entity of entities) {
+      if (!entity.isActive()) continue;
+
+      const physics = entity.getComponent('PhysicsComponent') as PhysicsComponent;
+      const movement = entity.getComponent('MovementComponent') as MovementComponent;
+
+      if (!physics) continue;
+
+      // Get current position
+      const pos = entity.getPosition();
+
+      // Apply gravity if in air
+      if (movement && !movement.isGrounded) {
+        physics.velocity.y += gravity * deltaTime;
+      }
+
+      // Apply velocity to position
+      pos.x += physics.velocity.x * deltaTime;
+      pos.y += physics.velocity.y * deltaTime;
+      pos.z += physics.velocity.z * deltaTime;
+
+      // Ground collision
+      if (pos.y <= groundY) {
+        pos.y = groundY;
+        physics.velocity.y = 0;
+
+        if (movement) {
+          movement.isGrounded = true;
+        }
+      }
+
+      // Apply damping/friction
+      physics.velocity.x *= 0.95;
+      physics.velocity.z *= 0.95;
+
+      // Update entity position
+      entity.setPosition(pos);
+    }
+  }
+
+  /**
+   * Update visual representations for all entities
+   */
+  function updateEntityVisuals(entities: Entity[]) {
+    // Update player mesh
+    if (playerEntity && playerMesh) {
+      const playerPos = playerEntity.getPosition();
+      playerMesh.position.set(playerPos.x, playerPos.y + 0.5, playerPos.z);
+    }
+
+    // Update enemy meshes
+    for (const entity of entities) {
+      if (entity.getType() === 'enemy') {
+        const enemyPos = entity.getPosition();
+        let mesh = enemyMeshes.get(entity.getId());
+
+        if (!mesh) {
+          // Create mesh for new enemy
+          const geometry = new THREE.BoxGeometry(1, 1, 1);
+          const material = new THREE.MeshStandardMaterial({ color: 0xff4444 });
+          mesh = new THREE.Mesh(geometry, material);
+          sceneManager.getScene().add(mesh);
+          enemyMeshes.set(entity.getId(), mesh);
+        }
+
+        // Update mesh position
+        mesh.position.set(enemyPos.x, enemyPos.y + 0.5, enemyPos.z);
+
+        // Check if enemy is dead
+        const combat = entity.getComponent('CombatComponent') as CombatComponent;
+        if (combat && combat.isDead) {
+          sceneManager.getScene().remove(mesh);
+          enemyMeshes.delete(entity.getId());
+          entityManager.destroyEntity(entity.getId());
+        }
+      }
+    }
+  }
 
   // Start screen handler
   startScreen.onStart(() => {
@@ -131,29 +304,58 @@ async function initGame() {
 
   // Game loop update
   gameLoop.onUpdate((deltaTime: number) => {
+    // Update input manager
+    inputManager.update();
+
     // Update game state
     gameState.update(deltaTime);
 
-    // Update camera to follow player target
-    cameraController.update(deltaTime, playerTarget);
-
-    // Move player in a circle for demonstration
+    // Only update game systems when playing
     if (gameState.isInState('PLAYING')) {
-      const time = gameState.getGameTime();
-      playerTarget.position.x = Math.sin(time) * 3;
-      playerTarget.position.z = Math.cos(time) * 3;
+      const allEntities = entityManager.getAllEntities();
+
+      // Get player direction and camera pitch from input manager
+      const playerYaw = inputManager.getPlayerYaw();
+      const cameraPitch = inputManager.getCameraPitch();
+
+      // Update player movement direction
+      movementSystem.setDirection(playerYaw);
+
+      // Check for player input
+      if (inputManager.consumeLeftClick()) {
+        if (playerEntity) {
+          const movement = playerEntity.getComponent('MovementComponent') as MovementComponent;
+          if (movement) {
+            if (movement.isGrounded) {
+              // Jump
+              movementSystem.triggerJump();
+            } else {
+              // Fast-fall
+              movementSystem.triggerFastFall();
+            }
+          }
+        }
+      }
+
+      // Update all game systems
+      movementSystem.update(deltaTime, allEntities);
+      combatSystem.update(deltaTime, allEntities);
+      spawnSystem.update(deltaTime, allEntities);
+
+      // Apply physics simulation
+      updatePhysics(deltaTime, allEntities);
+
+      // Update visual representations
+      updateEntityVisuals(allEntities);
+
+      // Update camera to follow player
+      if (playerEntity) {
+        cameraController.update(deltaTime, playerEntity as any, playerYaw, cameraPitch);
+      }
     }
-    playerMesh.position.x = playerTarget.position.x;
-    playerMesh.position.z = playerTarget.position.z;
 
     // Render scene
     sceneManager.render();
-
-    // Check for game over condition (placeholder: after 30 seconds)
-    if (gameState.isInState('PLAYING') && gameState.getGameTime() >= 30) {
-      gameState.triggerGameOver();
-      gameLoop.stop();
-    }
   });
 
   // Initial state
@@ -164,6 +366,8 @@ async function initGame() {
     gameLoop.stop();
     gameState.dispose();
     sceneManager.dispose();
+    entityManager.dispose();
+    inputManager.dispose();
   });
 }
 

@@ -1,162 +1,176 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+本文件为 Claude Code (claude.ai/code) 在此仓库中工作时提供指导。
 
-## Project Overview
+## 项目概述
 
-**Collapsed Arena** is a Three.js 3D endless survival game where players control rolling cube creatures, battle enemies, and absorb dropped cubes to grow larger and stronger.
+**Collapsed Arena** 是一款基于 Three.js 的 3D 无尽生存游戏，玩家控制滚动的立方体生物，与敌人战斗并吸收掉落的立方体来变得更大更强。
 
-- **Platform**: Pure Web Browser
-- **Tech Stack**: Three.js (WebGL) + Ammo.js (WASM physics engine)
-- **Architecture**: Layered ECS (Entity-Component-System) variant
-- **Language**: TypeScript/JavaScript
+- **平台**: 纯网页浏览器
+- **技术栈**: Three.js (WebGL) + Ammo.js (WASM 物理引擎)
+- **架构**: 分层 ECS (实体-组件-系统) 变体
+- **语言**: TypeScript/JavaScript
 
-## Core Development Principles
+## 核心开发原则
 
-### 1. Document-Driven Development (MANDATORY)
+### 1. 文档驱动开发（强制要求）
 
-This project strictly follows **document-driven development**. ALL implementation must be based on approved design documents:
+本项目严格遵循**动态文档驱动开发**。文档不是静态的——它与代码库共同演进。所有实现必须与文档保持同步。
 
-- **Game Design Document**: [docs/game-design.md](docs/game-design.md) - Complete game mechanics, numeric systems, and architecture
-- **Design Conversation**: [conversation.md](conversation.md) - Full design discussion history
-- **Future**: Technical design docs, engineering implementation plans
+**核心原则**:
+- **文档优先**: 代码实现文档化的设计，绝不能反向操作
+- **活文档**: 文档在开发过程中持续演进和细化
+- **主动文档化**: 发现文档缺失时主动创建新文档
+- **可追溯性**: 每个设计决策必须可追溯到某个文档
 
-**Workflow**:
-1. Read relevant design documents BEFORE implementing any feature
-2. Reference specific sections when making technical decisions
-3. Update docs when design changes (never implement unapproved changes)
-4. Maintain traceability between code and design requirements
+**关键文档**:
+- **游戏设计文档**: [docs/game-design.md](docs/game-design.md) - 完整的游戏机制、数值系统和架构
+- **设计对话记录**: [conversation.md](conversation.md) - 完整的设计讨论历史
+- **技术文档**: 按需创建（架构设计、API 文档、实现计划等）
 
-### 2. Configuration-Driven Numeric System
+**工作流程**（动态循环）:
+1. **实现前**: 阅读相关设计文档 → 理解需求和约束
+2. **实现中**: 发现设计问题时立即更新文档 → 再修改代码
+3. **发现缺失**: 文档不足时先创建/补充文档 → 再继续开发
+4. **设计变更**: 先更新文档（获得认可）→ 再实现代码变更
+5. **保持同步**: 代码与文档必须始终保持一致
 
-All game numbers must be externalized to JSON config files:
-- Combat values (damage, health, absorption rates)
-- Enemy spawn parameters
-- Performance optimization thresholds
-- Camera and physics settings
+**切记**:
+- ❌ 不要基于假设编写代码
+- ❌ 不要先改代码再补文档
+- ✅ 随时读取文档 → 随时修改文档 → 随时新增文档
+- ✅ 文档不足时停止开发，先补充文档
 
-Config location: `src/config/` (to be created)
-Reference: Section 9 in game-design.md for complete config schema
+### 2. 配置驱动的数值系统
 
-### 3. Zero-UI Design Philosophy
+所有游戏数值必须外置到 JSON 配置文件中：
+- 战斗数值（伤害、生命值、吸收率）
+- 敌人生成参数
+- 性能优化阈值
+- 相机和物理设置
 
-The game has **zero UI, zero text, zero HUD** during gameplay:
-- All information conveyed through visual/audio feedback
-- Player perceives state through game mechanics alone
-- See game-design.md Section 6 for visual feedback system
+配置位置: `src/config/`（待创建）
+参考: game-design.md 第 9 节的完整配置模式
 
-## Architecture Layers (Bottom-Up)
+### 3. 零 UI 设计理念
+
+游戏在游玩时**零 UI、零文本、零 HUD**：
+- 所有信息通过视觉/音频反馈传达
+- 玩家通过游戏机制感知状态
+- 见 game-design.md 第 6 节的视觉反馈系统
+
+## 架构层次（自底向上）
 
 ```
 ┌─────────────────────────────────────┐
-│    UI Layer (minimal - only menus)   │
+│    UI 层（极简 - 仅菜单）            │
 ├─────────────────────────────────────┤
-│    Game Logic Layer                  │
+│    游戏逻辑层                        │
 │    - EntityManager                   │
 │    - CombatSystem                    │
-│    - GrowthSystem (cube absorption)  │
-│    - DifficultyBalance (AI)          │
+│    - GrowthSystem（立方体吸收）       │
+│    - DifficultyBalance（AI）          │
 ├─────────────────────────────────────┤
-│    Physics Layer (Ammo.js)           │
-│    - Rigid body simulation           │
-│    - Collision detection             │
-│    - Force application               │
+│    物理层（Ammo.js）                 │
+│    - 刚体模拟                        │
+│    - 碰撞检测                        │
+│    - 力的应用                        │
 ├─────────────────────────────────────┤
-│    Rendering Layer (Three.js)        │
-│    - Scene, Camera, Lighting         │
-│    - Material management              │
+│    渲染层（Three.js）                │
+│    - 场景、相机、光照                │
+│    - 材质管理                        │
 ├─────────────────────────────────────┤
-│    Config Layer (JSON)               │
-│    - Numeric balance data            │
+│    配置层（JSON）                    │
+│    - 数值平衡数据                    │
 └─────────────────────────────────────┘
 ```
 
-Data Flow: Player Input → Movement/Attack Logic → Physics Simulation → Collision Detection → Combat Calculation → State Update → Render Feedback
+数据流: 玩家输入 → 移动/攻击逻辑 → 物理模拟 → 碰撞检测 → 战斗计算 → 状态更新 → 渲染反馈
 
-## Key Game Mechanics (Implementation Reference)
+## 关键游戏机制（实现参考）
 
-### Combat & Growth System
-- **Fall Attack**: Only fast-falling (mid-air double-click) deals damage
-- **Damage Formula**: `ceil(attacker.currentCubes / 8)`
-- **Cube Dropping**: Every 1/8 max health damage → enemy drops 1 cube
-- **Death Condition**: When `currentCubes < maxHistoricalCubes × 0.125`
-- **Absorption**: 50% rate with buffer system (data/presentation separation)
-- **Gravity Correction**: Algorithmic position recalculation, NOT physics force
+### 战斗与成长系统
+- **坠落攻击**: 只有快速坠落（空中双击）才能造成伤害
+- **伤害公式**: `ceil(attacker.currentCubes / 8)`
+- **立方体掉落**: 每造成 1/8 最大生命值伤害 → 敌人掉落 1 个立方体
+- **死亡条件**: 当 `currentCubes < maxHistoricalCubes × 0.125`
+- **吸收**: 50% 概率，带缓冲系统（数据/表现分离）
+- **重力校正**: 算法位置重新计算，而非物理力
 
-### Performance Optimization (Critical)
-- **Dropped Cubes**: Max 200, auto-despawn after 10s
-- **Collision Detection**: Spatial partitioning (10m grid) + distance culling (50m range)
-- **Three-stage filtering**: Distance → Spatial partition → Precise collision
+### 性能优化（关键）
+- **掉落立方体**: 最多 200 个，10 秒后自动消失
+- **碰撞检测**: 空间分区（10 米网格）+ 距离裁剪（50 米范围）
+- **三阶段过滤**: 距离 → 空间分区 → 精确碰撞
 
-### Numeric System
-- Historical max cubes: `max(8, actualHistoricalMax)` (minimum 8)
-- Attack power: `ceil(maxHistoricalCubes / 8)` (minimum 1)
-- Health: `currentCubes × 1`
+### 数值系统
+- 历史最大立方体数: `max(8, actualHistoricalMax)`（最小 8）
+- 攻击力: `ceil(maxHistoricalCubes / 8)`（最小 1）
+- 生命值: `currentCubes × 1`
 
-## Development Commands
+## 开发命令
 
 ```bash
-# Install dependencies
+# 安装依赖
 npm install
 
-# Development server (when project is set up)
+# 开发服务器（项目配置完成后）
 npm run dev
 
-# Build (when project is set up)
+# 构建（项目配置完成后）
 npm run build
 
-# Run tests (when implemented)
+# 运行测试（实现后）
 npm test
 ```
 
-**Note**: This is a new project. Commands above are placeholders until build system is configured.
+**注意**: 这是一个新项目。以上命令在构建系统配置前为占位符。
 
-## Code Organization Guidelines
+## 代码组织指南
 
-### ECS Structure
-- **Entity**: Base class with id, type, position, components
-- **Components**: CubeClusterComponent, CombatComponent, MovementComponent
-- **Systems**: Separate logic from data, process entities by components
+### ECS 结构
+- **Entity**: 基类，包含 id、type、position、components
+- **Components**: CubeClusterComponent、CombatComponent、MovementComponent
+- **Systems**: 逻辑与数据分离，按组件处理实体
 
-### File Structure (Planned)
+### 文件结构（计划中）
 ```
 src/
-├── config/          # JSON game balance files
-├── core/            # Entity, Component base classes
-├── systems/         # CombatSystem, GrowthSystem, etc.
-├── physics/         # Ammo.js wrapper
-├── rendering/       # Three.js scene setup
-├── ui/              # Minimal menu system
-└── main.ts          # Entry point
+├── config/          # JSON 游戏平衡文件
+├── core/            # Entity、Component 基类
+├── systems/         # CombatSystem、GrowthSystem 等
+├── physics/         # Ammo.js 封装
+├── rendering/       # Three.js 场景设置
+├── ui/              # 极简菜单系统
+└── main.ts          # 入口点
 ```
 
-## Important Implementation Notes
+## 重要实现注意事项
 
-1. **Physics-Driven Rendering**: Sync render positions to physics, never the reverse
-2. **Data/Presentation Separation**: Absorption buffer system is a prime example
-3. **No Magic Numbers**: All values in config, documented with formulas
-4. **Performance First**: Optimizations (spatial partitioning, object pooling) are mandatory, not optional
-5. **Ammo.js WASM**: Required for handling massive numbers of physics objects (hundreds of cubes)
+1. **物理驱动渲染**: 渲染位置同步到物理，绝不能反向
+2. **数据/表现分离**: 吸收缓冲系统是典型例子
+3. **杜绝魔法数字**: 所有数值在配置中，用公式记录
+4. **性能优先**: 优化（空间分区、对象池）是必须的，非可选
+5. **Ammo.js WASM**: 处理大量物理对象（数百个立方体）所必需
 
-## When Implementing Features
+## 实现功能时的步骤
 
-1. **Read First**: Always consult game-design.md for mechanic details
-2. **Config First**: Define numeric values in config before coding logic
-3. **Test Against Docs**: Verify implementation matches design document formulas
-4. **Update Docs**: If design changes during implementation, update docs first
+1. **先阅读**: 始终查阅 game-design.md 了解机制细节
+2. **先配置**: 在编码逻辑前先在配置中定义数值
+3. **对照文档测试**: 验证实现与设计文档公式一致
+4. **更新文档**: 实现过程中设计变更时，先更新文档
 
-## Document References
+## 文档引用
 
-| Topic | Document | Section |
+| 主题 | 文档 | 章节 |
 |-------|----------|---------|
-| Core Mechanics | game-design.md | Section 2 |
-| Numeric Formulas | game-design.md | Section 3 |
-| Architecture | game-design.md | Section 4 |
-| Components | game-design.md | Section 5 |
-| Visual Feedback | game-design.md | Section 6 |
-| Config Schema | game-design.md | Section 9 |
-| Development Principles | conversation.md | Lines 9-11 |
+| 核心机制 | game-design.md | 第 2 节 |
+| 数值公式 | game-design.md | 第 3 节 |
+| 架构 | game-design.md | 第 4 节 |
+| 组件 | game-design.md | 第 5 节 |
+| 视觉反馈 | game-design.md | 第 6 节 |
+| 配置模式 | game-design.md | 第 9 节 |
+| 开发原则 | conversation.md | 第 9-11 行 |
 
 ---
 
-**Remember**: When in doubt, READ THE DOCS. This project is built on documented requirements, not assumptions.
+**记住**: 有疑问时，查阅文档。本项目基于文档化需求构建，而非假设。
