@@ -98,3 +98,32 @@ export class AbsorptionComponent extends Component {
     super('AbsorptionComponent');
   }
 }
+
+/**
+ * AIComponent - Stores AI behavior state
+ */
+export class AIComponent extends Component {
+  constructor(
+    public trackingSpeedMultiplier: number = 0.8,
+    public jumpTriggerDistance: number = 20,
+    public fastFallTriggerTime: number = 0.3,
+    public attackCooldown: number = 2.0,
+    public lastAttackTime: number = 0
+  ) {
+    super('AIComponent');
+  }
+}
+
+/**
+ * SpawnComponent - Stores spawn wave data
+ */
+export class SpawnComponent extends Component {
+  constructor(
+    public currentWave: number = 0,
+    public spawnInterval: number = 8.0,
+    public lastSpawnTime: number = 0,
+    public enemiesPerWave: number = 1
+  ) {
+    super('SpawnComponent');
+  }
+}
